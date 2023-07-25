@@ -1,214 +1,154 @@
-#!/usr/bin/env python3
-
-from flask import Flask, render_template, request
-
-import os.path
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-
-SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
-
-SPREADSHEET_ID = '1SWjNBVu3bDMev3NQe1Bef9VTx48WLP-SsoUADCLmDRE'
+from flask import Flask, render_template
+from pybaseball import batting_stats, pitching_stats
+from statsapi import schedule
+from datetime import date
+import concurrent.futures
 
 app = Flask(__name__)
-        
-def get_cell_value(sheet, cell_range):
-    result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=cell_range).execute()
-    values = result.get("values", [])
+
+@app.route('/')
+def main():
+    team_mapping = {
+        "Arizona Diamondbacks": "ARI",
+        "Atlanta Braves": "ATL",
+        "Baltimore Orioles": "BAL",
+        "Boston Red Sox": "BOS",
+        "Chicago White Sox": "CHW",
+        "Chicago Cubs": "CHC",
+        "Cincinnati Reds": "CIN",
+        "Cleveland Guardians": "CLE",
+        "Colorado Rockies": "COL",
+        "Detroit Tigers": "DET",
+        "Houston Astros": "HOU",
+        "Kansas City Royals": "KCR",
+        "Los Angeles Angels": "LAA",
+        "Los Angeles Dodgers": "LAD",
+        "Miami Marlins": "MIA",
+        "Milwaukee Brewers": "MIL",
+        "Minnesota Twins": "MIN",
+        "New York Yankees": "NYY",
+        "New York Mets": "NYM",
+        "Oakland Athletics": "OAK",
+        "Philadelphia Phillies": "PHI",
+        "Pittsburgh Pirates": "PIT",
+        "San Diego Padres": "SDP",
+        "San Francisco Giants": "SFG",
+        "Seattle Mariners": "SEA",
+        "St. Louis Cardinals": "STL",
+        "Tampa Bay Rays": "TBR",
+        "Texas Rangers": "TEX",
+        "Toronto Blue Jays": "TOR",
+        "Washington Nationals": "WSN"
+    }
+
+    park_factor = {
+        "ARI":86,
+        "ATL":110,
+        "BAL":108,
+        "BOS":98,
+        "CHW":111,
+        "CHC":106,
+        "CIN":133,
+        "CLE":91,
+        "COL":108,
+        "DET":77,
+        "HOU":101,
+        "KCR":80,
+        "LAA":112,
+        "LAD":123,
+        "MIA":82,
+        "MIL":109,
+        "MIN":103,
+        "NYY":116,
+        "NYM":94,
+        "OAK":84,
+        "PHI":108,
+        "PIT":82,
+        "SDP":92,
+        "SFG":84,
+        "SEA":100,
+        "STL":89,
+        "TBR":94,
+        "TEX":108,
+        "TOR":106,
+        "WSN":107 
+    }
+
+    #get today's game schedule
+    start_date = date.today()
+    games = schedule(start_date=start_date.strftime('%m/%d/%Y'))
+
+    #pitching data
+    pitching_data = pitching_stats(2023, league='all', qual=1)
+    pitching_data_json = pitching_data.to_dict(orient='records')
+
+    #pitcher index
+    p_index = {}
+
+    #find probable pitchers
+    opposing_pitcher = {}
+
+    home_away_teams = {}
+
+    for game in games:
+        home_team = game['home_name']
+        away_team = game['away_name']
+        home_pitcher = game['home_probable_pitcher']
+        away_pitcher = game['away_probable_pitcher']
+
+        home_away_teams[team_mapping[home_team]] = team_mapping[away_team]
+
+        opposing_pitcher[team_mapping[home_team]] = away_pitcher
+        opposing_pitcher[team_mapping[away_team]] = home_pitcher
     
-    return values
+    for pitcher in pitching_data_json:
+        if pitcher['Name'] in opposing_pitcher.values():
+            p_index[pitcher['Name']] = round(
+                pitcher['HR/9+'] * 0.3 +
+                pitcher['HR/FB%+'] * 0.25 +
+                pitcher['HardHit%'] * 0.15 +
+                pitcher['GB%+'] * 0.1 +
+                pitcher['LD%+'] * 0.05 +
+                pitcher['FB%+'] * 0.05 +
+                pitcher['WHIP+'] * 0.1 +
+                pitcher['K/9+'] * 0.05,
+                3
+            )
 
-@app.route('/', methods=['GET', 'POST'])
-def display_cells():
-    
-    creds = None
+    #get all batter data with min. 100 ABs
+    batter = batting_stats(2023, qual=100)
+    batter_json = batter.to_dict(orient='records')
 
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+    #index map to each batter
+    hitter_index = {}
 
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+    # Calculate the index for each batter and print it
+    for batter in batter_json:
+        probable_pitcher = opposing_pitcher.get(batter['Team'])
         
+        batter_index = round(
+            10 * (batter['SLG'] * 0.15 + 
+                batter['ISO'] * 0.15 + 
+                batter['HR/FB'] * 0.12 +
+                batter['Barrel%'] * 0.1 + 
+                batter['EV'] * 0.1 + 
+                batter['LA'] * 0.08 +
+                batter['HardHit%'] * 0.1 + 
+                batter['wOBA'] * 0.12 + 
+                batter['Pull%'] * 0.08),
+            3
+        )
+        #pick home park
+        for home_team, away_team in home_away_teams.items():
+            if batter['Team'] == home_team or batter['Team'] == away_team: #if batter's team is equal to home team or away team
+                park = home_team
+        if probable_pitcher: #probable pitcher info exists
+            hitter_index[batter['Name']] = (0.75 * batter_index + 0.15 * p_index[opposing_pitcher[batter['Team']]] + 0.1 * park_factor[park])
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
+            hitter_index[batter['Name']] = (0.85 * batter_index + 0.15 * park_factor[park])
 
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
-
-    try:
-        service = build('sheets', 'v4', credentials=creds)
-        sheet = service.spreadsheets()
-
-        #all input properties
-        if request.method == 'POST':
-
-            updates = []
-
-            name = request.form.get('name')
-            if name:
-                updates.append(('DASHBOARD!C3', name))
-
-            purchase_price = request.form.get('purchase_price')
-            if purchase_price:
-                updates.append(('DASHBOARD!C10', int(purchase_price)))
-
-            unit_count = request.form.get('unit_count')
-            if unit_count:
-                updates.append(('DASHBOARD!C6', int(unit_count)))
-
-            sample = request.form.get('sample')
-            if sample:
-                updates.append(('Investor Sample!E3', int(sample)))
-            
-            lp_split = request.form.get('lp_split')
-            if lp_split:
-                updates.append(('DASHBOARD!L4', float(lp_split)/100))
-
-            asset_management_fee = request.form.get('asset_management_fee')
-            if asset_management_fee:
-               updates.append(('DASHBOARD!D36', float(asset_management_fee)/100))
-
-            preferred_return = request.form.get('preferred_return')
-            if preferred_return:
-               updates.append(('DASHBOARD!L6', float(preferred_return)/100))
-
-            hurdle = request.form.get('hurdle')
-            if hurdle:
-               updates.append(('DASHBOARD!L8', float(hurdle)/100))
-
-            earnest_money = request.form.get('earnest_money')
-            if earnest_money:
-               updates.append(('DASHBOARD!C21', int(earnest_money)))
-
-            acq_fee = request.form.get('acq_fee')
-            if acq_fee:
-               updates.append(('DASHBOARD!D35', float(acq_fee)/100))
-
-            closing_cost = request.form.get('closing_cost')
-            if closing_cost:
-                updates.append(('ClosingCosts!D7', float(closing_cost)/100))
-
-            capex = request.form.get('capex')
-            if capex:
-                updates.append(('CapEx&Reserves!D4', int(capex)))
-
-            down_payment = request.form.get('down_payment')
-            if down_payment:
-                updates.append(('DASHBOARD!I5', float(down_payment)/100))
-
-            rate = request.form.get('rate')
-            if rate:
-                updates.append(('DASHBOARD!I6', float(rate)/100))
-
-            io_months = request.form.get('io_months')
-            if io_months:
-                updates.append(('DASHBOARD!I7', int(io_months)))
-
-            amor_months = request.form.get('amor_months')
-            if amor_months:
-                updates.append(('DASHBOARD!I8', int(amor_months)))
-
-            ltv_refi = request.form.get('ltv_refi')
-            if ltv_refi:
-                updates.append(('DASHBOARD!I30', float(ltv_refi)/100))
-
-            rate_refi = request.form.get('rate_refi')
-            if rate_refi:
-                updates.append(('DASHBOARD!I23', float(rate_refi)/100))
-
-            refi_year = int(request.form.get('refi_year'))
-            if refi_year:
-                updates.append(('DASHBOARD!I28', int(refi_year)))
-
-            cap_rate_refi = request.form.get('cap_rate_refi')
-            if cap_rate_refi:
-                updates.append(('DASHBOARD!I29', float(cap_rate_refi)/100))
-
-            sale_year = request.form.get('sale_year')
-            if sale_year:
-                updates.append(('DASHBOARD!I31', int(sale_year)))
-
-            cap_rate_sale = request.form.get('cap_rate_sale')
-            if cap_rate_sale:
-                updates.append(('DASHBOARD!I32', float(cap_rate_sale)/100))
-
-            rent = request.form.get('rent')
-            if rent:
-                updates.append(('Actuals&UnitMix!C6', int(rent)*12))
-
-            vacancy = request.form.get('vacancy')
-            if vacancy:
-                updates.append(('Actuals&UnitMix!D7', float(vacancy)/100))
-
-            other_income = request.form.get('other_income')
-            if other_income:
-                updates.append(('Actuals&UnitMix!C10', int(other_income)))
-
-            annual_expenses = request.form.get('annual_expenses')
-            if annual_expenses:
-                updates.append(('Actuals&UnitMix!C30', int(annual_expenses)*12))
-
-            rent_escalator_1 = request.form.get('rent_escalator_1')
-            if rent_escalator_1:
-                updates.append(('P&L!D3', float(rent_escalator_1)/100))
-
-            rent_escalator_2 = request.form.get('rent_escalator_2')
-            if rent_escalator_2:
-                updates.append(('P&L!F3', float(rent_escalator_2)/100))
-
-            rent_escalator_3 = request.form.get('rent_escalator_3')
-            if rent_escalator_3:
-                updates.append(('P&L!H3', float(rent_escalator_3)/100))
-
-            expenses_escalator = request.form.get('expenses_escalator')
-            if expenses_escalator:
-                updates.append(('P&L!D4', float(expenses_escalator)/100))
-
-            #batch update
-            if updates:
-                batch_update = {
-                    'data': [],
-                    'valueInputOption': 'RAW'
-                }
-
-                for update in updates:
-                    cell_range = update[0]
-                    value = update[1]
-                    update_values = [[value]]
-                    batch_update['data'].append({
-                        'range': cell_range,
-                        'values': update_values
-                    })
-
-                result = sheet.values().batchUpdate(
-                    spreadsheetId=SPREADSHEET_ID,
-                    body=batch_update
-                ).execute()
-                
-        #output
-        equity_stack = get_cell_value(sheet, 'DASHBOARD!C27:C32')
-        project_returns = get_cell_value(sheet, 'DASHBOARD!L35:L38')
-        investor_returns = get_cell_value(sheet, 'Investor Sample!G12:G16')
-        sample_returns = get_cell_value(sheet, 'Investor Sample!Q6:Q11')
-        splits = get_cell_value(sheet, 'DASHBOARD!L4:L5')
-        details = get_cell_value(sheet, 'P&L!D16:V78')
-
-        return render_template('index.html', equity_stack=equity_stack, 
-                               project_returns=project_returns, 
-                               investor_returns=investor_returns, 
-                               sample_returns=sample_returns, 
-                               splits=splits, 
-                               details=details)
-    
-    except Exception as e:
-        error_message = str(e)
-        return render_template('error.html', error_message=error_message)
-
+    sorted_hitter_index = dict(sorted(hitter_index.items(), key=lambda item: item[1], reverse=True))
+    return render_template('index.html', hitter_index=sorted_hitter_index)
+                           
 if __name__ == '__main__':
     app.run(debug=True)
