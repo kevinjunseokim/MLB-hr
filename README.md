@@ -1,3 +1,2 @@
-Real Estate Syndication Analyzer
-
+MLB Home Run Index
 By Kevin Kim
