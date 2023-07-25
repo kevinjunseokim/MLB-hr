@@ -8,14 +8,15 @@
     <thead>
         <tr>
             <th>Name</th>
-            <th>INDEX</th>
+            <th>Index</th>
+            <th>Odds</th>
         </tr>
     </thead>
     <tbody>
-        {% for name, index in hitter_index.items() %}
+        {% for row in hitter_index %}
             <tr>
-                <td>{{ name }}</td>
-                <td>{{ index | round(1)}}</td>
+                <td>{{ row[0] }}</td>
+                <td>{{ row[1] | round(1) }}</td>
             </tr>
         {% endfor %}
     </tbody>

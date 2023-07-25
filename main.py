@@ -1,12 +1,16 @@
 from flask import Flask, render_template
+from flask_caching import Cache
 from pybaseball import batting_stats, pitching_stats
 from statsapi import schedule
 from datetime import date
+import heapq
 import concurrent.futures
 
 app = Flask(__name__)
+cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 
 @app.route('/')
+@cache.cached(timeout=60 * 60 * 6)
 def main():
     team_mapping = {
         "Arizona Diamondbacks": "ARI",
@@ -42,36 +46,36 @@ def main():
     }
 
     park_factor = {
-        "ARI":86,
-        "ATL":110,
-        "BAL":108,
-        "BOS":98,
-        "CHW":111,
-        "CHC":106,
-        "CIN":133,
-        "CLE":91,
-        "COL":108,
-        "DET":77,
-        "HOU":101,
-        "KCR":80,
-        "LAA":112,
-        "LAD":123,
-        "MIA":82,
-        "MIL":109,
-        "MIN":103,
-        "NYY":116,
-        "NYM":94,
-        "OAK":84,
-        "PHI":108,
-        "PIT":82,
-        "SDP":92,
-        "SFG":84,
-        "SEA":100,
-        "STL":89,
-        "TBR":94,
-        "TEX":108,
-        "TOR":106,
-        "WSN":107 
+        "ARI":0.86,
+        "ATL":1.10,
+        "BAL":1.08,
+        "BOS":0.98,
+        "CHW":1.11,
+        "CHC":1.06,
+        "CIN":1.33,
+        "CLE":0.91,
+        "COL":1.08,
+        "DET":0.77,
+        "HOU":1.01,
+        "KCR":0.80,
+        "LAA":1.12,
+        "LAD":1.23,
+        "MIA":0.82,
+        "MIL":1.09,
+        "MIN":1.03,
+        "NYY":1.16,
+        "NYM":0.94,
+        "OAK":0.84,
+        "PHI":1.08,
+        "PIT":0.82,
+        "SDP":0.92,
+        "SFG":0.84,
+        "SEA":1.00,
+        "STL":0.89,
+        "TBR":0.94,
+        "TEX":1.08,
+        "TOR":1.06,
+        "WSN":1.07 
     }
 
     #get today's game schedule
@@ -119,36 +123,45 @@ def main():
     batter = batting_stats(2023, qual=100)
     batter_json = batter.to_dict(orient='records')
 
-    #index map to each batter
-    hitter_index = {}
+    top_20_heap = []
 
-    # Calculate the index for each batter and print it
     for batter in batter_json:
         probable_pitcher = opposing_pitcher.get(batter['Team'])
-        
+
         batter_index = round(
-            10 * (batter['SLG'] * 0.15 + 
-                batter['ISO'] * 0.15 + 
+            10 * (batter['SLG'] * 0.15 +
+                batter['ISO'] * 0.15 +
                 batter['HR/FB'] * 0.12 +
-                batter['Barrel%'] * 0.1 + 
-                batter['EV'] * 0.1 + 
+                batter['Barrel%'] * 0.1 +
+                batter['EV'] * 0.1 +
                 batter['LA'] * 0.08 +
-                batter['HardHit%'] * 0.1 + 
-                batter['wOBA'] * 0.12 + 
+                batter['HardHit%'] * 0.1 +
+                batter['wOBA'] * 0.12 +
                 batter['Pull%'] * 0.08),
             3
         )
-        #pick home park
+        # Pick home park
         for home_team, away_team in home_away_teams.items():
-            if batter['Team'] == home_team or batter['Team'] == away_team: #if batter's team is equal to home team or away team
+            if batter['Team'] == home_team or batter['Team'] == away_team:
                 park = home_team
-        if probable_pitcher: #probable pitcher info exists
-            hitter_index[batter['Name']] = (0.75 * batter_index + 0.15 * p_index[opposing_pitcher[batter['Team']]] + 0.1 * park_factor[park])
+        if probable_pitcher:  # probable pitcher info exists
+            index = ((0.75 * batter_index + 0.25 * p_index[opposing_pitcher[batter['Team']]]) * (1 + (park_factor[park] - 1)/2))
         else:
-            hitter_index[batter['Name']] = (0.85 * batter_index + 0.15 * park_factor[park])
+            index = (batter_index * (1 + (park_factor[park] - 1)/2))
 
-    sorted_hitter_index = dict(sorted(hitter_index.items(), key=lambda item: item[1], reverse=True))
-    return render_template('index.html', hitter_index=sorted_hitter_index)
+        # Push the current hitter to the heap with the negation of the index value
+        # This will effectively represent the highest index value when sorting the heap in descending order
+        heapq.heappush(top_20_heap, (index, batter['Name']))
+
+        # If the heap size exceeds 20, remove the smallest element (negative index) from the heap
+        if len(top_20_heap) > 20:
+            heapq.heappop(top_20_heap)
+
+    # Sort the heap in descending order by index (now that we have negated the index values)
+    top_20_hitters = [(name, index) for index, name in top_20_heap]
+    top_20_hitters.sort(key= lambda x: -x[1])
+
+    return render_template('index.html', hitter_index=top_20_hitters)
                            
 if __name__ == '__main__':
     app.run(debug=True)
