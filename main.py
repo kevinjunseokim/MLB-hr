@@ -4,11 +4,26 @@ from pybaseball import batting_stats, pitching_stats
 from statsapi import schedule
 from datetime import date
 import heapq
-import concurrent.futures
+import requests
+import json
 
 app = Flask(__name__)
 cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 
+API_KEY = '991a6a8e4857e3285d3cf72aa1d5c8d1'
+def get_odds_data(hitter, index, team_id):
+  odds_response = requests.get(f'https://api.the-odds-api.com/v4/sports/baseball_mlb/events/{team_id}/odds?apiKey={API_KEY}&regions=us&markets=batter_home_runs&oddsFormat=american')
+  odds_json = json.loads(odds_response.text)
+
+  for bookmaker in odds_json['bookmakers']:
+    if bookmaker['key'] == 'draftkings':
+        for market in bookmaker['markets']:
+            if market['key'] == 'batter_home_runs':
+                for outcome in market['outcomes']:
+                    if outcome['description'] == hitter and outcome['name'] == 'Over':
+                        print(outcome['price'])
+                        break
+            
 @app.route('/')
 @cache.cached(timeout=60 * 60 * 6)
 def main():
@@ -120,7 +135,7 @@ def main():
             )
 
     #get all batter data with min. 100 ABs
-    batter = batting_stats(2023, qual=100)
+    batter = batting_stats(2023, qual=300)
     batter_json = batter.to_dict(orient='records')
 
     top_20_heap = []
@@ -149,19 +164,30 @@ def main():
         else:
             index = (batter_index * (1 + (park_factor[park] - 1)/2))
 
-        # Push the current hitter to the heap with the negation of the index value
-        # This will effectively represent the highest index value when sorting the heap in descending order
-        heapq.heappush(top_20_heap, (index, batter['Name']))
+        heapq.heappush(top_20_heap, (index, batter['Name'], batter['Team']))
 
-        # If the heap size exceeds 20, remove the smallest element (negative index) from the heap
-        if len(top_20_heap) > 20:
+        if len(top_20_heap) > 5:
             heapq.heappop(top_20_heap)
 
-    # Sort the heap in descending order by index (now that we have negated the index values)
-    top_20_hitters = [(name, index) for index, name in top_20_heap]
+    top_20_hitters = [(name, index, team) for index, name, team in top_20_heap]
     top_20_hitters.sort(key= lambda x: -x[1])
+    
+    #game ids
+    game_ids_response = requests.get('https://api.the-odds-api.com/v4/sports/baseball_mlb/odds/?apiKey=991a6a8e4857e3285d3cf72aa1d5c8d1&regions=us')
+    game_ids_json = json.loads(game_ids_response.text)
 
+    #id_team
+    id_team = {}
+
+    for game in game_ids_json:
+      id_team[team_mapping[game['home_team']]] = game['id']
+      id_team[team_mapping[game['away_team']]] = game['id']
+
+    odds_api_key = '991a6a8e4857e3285d3cf72aa1d5c8d1'
+    for hitter, index, team in top_20_hitters:
+        get_odds_data(hitter, index, id_team[team])
+    
     return render_template('index.html', hitter_index=top_20_hitters)
-                           
+         
 if __name__ == '__main__':
     app.run(debug=True)
