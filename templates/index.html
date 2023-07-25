@@ -9,7 +9,7 @@
         <tr>
             <th>Name</th>
             <th>Index</th>
-            <th>Odds</th>
+            <th>Team</th>
         </tr>
     </thead>
     <tbody>
@@ -17,6 +17,7 @@
             <tr>
                 <td>{{ row[0] }}</td>
                 <td>{{ row[1] | round(1) }}</td>
+                <td>{{ row[2] }}</td>
             </tr>
         {% endfor %}
     </tbody>
