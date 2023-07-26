@@ -1,5 +1,12 @@
+import os
 import tweepy
 from datetime import date
+
+consumer_key = os.environ.get('API_KEY')
+consumer_secret = os.environ.get('API_SECRET')
+access_token = os.environ.get('ACCESS_TOKEN')
+access_token_secret = os.environ.get('ACCESS_TOKEN_SECRET')
+
 
 def tweet(top_20_hitters):
 
@@ -51,10 +58,10 @@ def tweet(top_20_hitters):
 
     tweet += '\n\n#MLBTwitter #MLBPicks #MLBBets'
 
-    client = tweepy.Client(consumer_key=${{ secrets.API_KEY }},
-                    consumer_secret=${{ secrets.API_SECRET }},
-                    access_token=${{ secrets.ACCESS_TOKEN }},
-                    access_token_secret=${{ secrets.ACCESS_TOKEN_SECRET }})
+    client = tweepy.Client(consumer_key=consumer_key,
+                    consumer_secret=consumer_secret,
+                    access_token=access_token,
+                    access_token_secret=access_token_secret)
     
     response = client.create_tweet(text=tweet)
     print('Tweeted!')
