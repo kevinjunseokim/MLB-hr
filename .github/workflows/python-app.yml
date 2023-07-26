@@ -33,4 +33,4 @@ jobs:
         pytest
     - name: Run main.py every minute
       run: |
-        python main.py
+        python3 main.py
