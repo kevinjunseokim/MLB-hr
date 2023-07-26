@@ -1,5 +1,4 @@
 import tweepy
-import keys
 from datetime import date
 
 def tweet(top_20_hitters):
@@ -52,10 +51,10 @@ def tweet(top_20_hitters):
 
     tweet += '\n\n#MLBTwitter #MLBPicks #MLBBets'
 
-    client = tweepy.Client(consumer_key=keys.api_key,
-                    consumer_secret=keys.api_secret,
-                    access_token=keys.access_token,
-                    access_token_secret=keys.access_token_secret)
+    client = tweepy.Client(consumer_key=${{ secrets.API_KEY }},
+                    consumer_secret=${{ secrets.API_SECRET }},
+                    access_token=${{ secrets.ACCESS_TOKEN }},
+                    access_token_secret=${{ secrets.ACCESS_TOKEN_SECRET }})
     
     response = client.create_tweet(text=tweet)
     print('Tweeted!')
