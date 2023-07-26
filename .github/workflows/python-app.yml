@@ -1,13 +1,12 @@
-name: HR Tweet
-
+name: "Workflow example"
 on:
   schedule:
     - cron: "* * * * *"
 
 jobs:
-  build:
+  hello:
+    name: "Say hello"
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v3
 
