@@ -137,9 +137,9 @@ def calculate_top_hitters():
             if batter['Team'] == home_team or batter['Team'] == away_team:
                 park = home_team
         if probable_pitcher:  # probable pitcher info exists
-            index = ((0.75 * batter_index + 0.25 * p_index[opposing_pitcher[batter['Team']]]) * (1 + (park_factor[park] - 1)/2))
+            index = ((0.65 * batter_index + 0.35 * p_index[opposing_pitcher[batter['Team']]]) * (1 + (park_factor[park] - 1)/2))
         else:
-            index = (batter_index * (1 + (park_factor[park] - 1)/2))
+            index = ((0.65 * batter_index + 0.35 ) * (1 + (park_factor[park] - 1)/2))
 
         heapq.heappush(top_20_heap, (index, batter['Name'], batter['Team']))
 
