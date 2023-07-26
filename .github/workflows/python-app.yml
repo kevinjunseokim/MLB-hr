@@ -1,21 +1,12 @@
-name:
-  First Cron Job
- 
-  # Controls when the workflow will run
+name: "Workflow example"
 on:
-  # Triggers the workflow every 5 minutes
   schedule:
-    - cron: "*/5 * * * *"
- 
-      # A workflow run is made up of one or more jobs that can run sequentially or in parallel
+    - cron: '*/10 * * * *'
+
 jobs:
-  # This workflow contains a single job called "cron"
-  cron:
-    # The type of runner that the job will run on
+  hello:
+    name: "Say hello"
     runs-on: ubuntu-latest
- 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+      - name: Display message
+        run: echo "Hello from GitHub Actions!"
