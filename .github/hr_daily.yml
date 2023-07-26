@@ -1,0 +1,24 @@
+name: Daily HR Prediction
+
+on:
+  schedule:
+    - cron: '30 1 * * *'
+
+jobs:
+  predict_hr:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.11'
+
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run prediction script
+        run: python main.py >> logfile.log 2>&1
