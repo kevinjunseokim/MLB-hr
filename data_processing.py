@@ -38,6 +38,7 @@ def calculate_top_hitters():
     }
 
     park_factor = {
+        "default":1.0,
         "ARI":0.86,
         "ATL":1.10,
         "BAL":1.08,
@@ -116,6 +117,7 @@ def calculate_top_hitters():
     batter_json = batter.to_dict(orient='records')
 
     top_20_heap = []
+    park = "default"
 
     for batter in batter_json:
         probable_pitcher = opposing_pitcher.get(batter['Team'])
