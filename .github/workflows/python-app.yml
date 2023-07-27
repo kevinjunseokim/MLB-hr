@@ -2,7 +2,7 @@ name: HR Tweet
 
 on:
   schedule:
-    - cron: "* * * * *"
+    - cron: "0 14 * * *"
 
 permissions:
   contents: read
