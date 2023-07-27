@@ -38,6 +38,7 @@ def calculate_top_hitters():
     }
 
     park_factor = {
+        "default":1.00,
         "ARI":0.86,
         "ATL":1.10,
         "BAL":1.08,
@@ -72,7 +73,7 @@ def calculate_top_hitters():
 
     #get today's game schedule
     start_date = date.today()
-    games = schedule(start_date=start_date.strftime('%m/%d/%Y'))
+    games = schedule(start_date=start_date.strftime('2023-07-28'))
 
     #pitching data
     pitching_data = pitching_stats(2023, league='all', qual=1)
@@ -99,7 +100,7 @@ def calculate_top_hitters():
     
     for pitcher in pitching_data_json:
         if pitcher['Name'] in opposing_pitcher.values():
-            p_index[pitcher['Name']] = round(
+            p_index[pitcher['Name']] = (200 + round(
                 pitcher['HR/9+'] * 0.3 +
                 pitcher['HR/FB%+'] * 0.25 +
                 pitcher['HardHit%'] * 0.15 +
@@ -109,13 +110,15 @@ def calculate_top_hitters():
                 pitcher['WHIP+'] * 0.1 +
                 pitcher['K/9+'] * 0.05,
                 3
-            )
+            )) / 3
 
     #get all batter data with min. 100 ABs
     batter = batting_stats(2023, qual=100)
     batter_json = batter.to_dict(orient='records')
 
     top_20_heap = []
+
+    park = "default"
 
     for batter in batter_json:
         probable_pitcher = opposing_pitcher.get(batter['Team'])
@@ -136,15 +139,16 @@ def calculate_top_hitters():
         for home_team, away_team in home_away_teams.items():
             if batter['Team'] == home_team or batter['Team'] == away_team:
                 park = home_team
-        if probable_pitcher:  # probable pitcher info exists
-            index = ((0.65 * batter_index + 0.35 * p_index[opposing_pitcher[batter['Team']]]) * (1 + (park_factor[park] - 1)/2))
-        else:
-            index = ((0.65 * batter_index + 0.35 ) * (1 + (park_factor[park] - 1)/2))
 
-        heapq.heappush(top_20_heap, (index, batter['Name'], batter['Team']))
+                if probable_pitcher:  # probable pitcher info exists
+                    index = ((0.7 * batter_index + 0.3 * p_index[opposing_pitcher[batter['Team']]])) * (1 + (park_factor[park] - 1)/100)
+                else:
+                    index = ((0.7 * batter_index + 0.3)) * (1 + (park_factor[park] - 1)/100)
 
-        if len(top_20_heap) > 20:
-            heapq.heappop(top_20_heap)
+                heapq.heappush(top_20_heap, (index, batter['Name'], batter['Team']))
+
+                if len(top_20_heap) > 20:
+                    heapq.heappop(top_20_heap)
 
     top_20_hitters = [(name, index, team) for index, name, team in top_20_heap]
     top_20_hitters.sort(key= lambda x: -x[1])
