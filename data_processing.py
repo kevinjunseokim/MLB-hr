@@ -117,6 +117,7 @@ def calculate_top_hitters():
     batter_json = batter.to_dict(orient='records')
 
     top_20_heap = []
+    park = "default"
 
     park = "default"
 
