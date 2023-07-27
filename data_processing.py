@@ -73,7 +73,7 @@ def calculate_top_hitters():
 
     #get today's game schedule
     start_date = date.today()
-    games = schedule(start_date=start_date.strftime('2023-07-28'))
+    games = schedule(start_date=start_date.strftime('%Y-%m-%d'))
 
     #pitching data
     pitching_data = pitching_stats(2023, league='all', qual=1)
